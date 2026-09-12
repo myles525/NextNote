@@ -17,6 +17,17 @@ python main.py
 Requires a working microphone recognized as the system's default input
 device.
 
+On macOS, double-click `Run NextNote.command` instead of using the terminal —
+it sets up the virtual environment on first run and launches the app.
+
+**macOS gotcha:** create the virtual environment with Homebrew's Python (or
+python.org's installer), not Xcode's bundled `Python3.framework`. If `python3`
+on your PATH resolves to Xcode's copy, macOS's privacy system hard-crashes
+the process the moment it touches the microphone instead of showing the
+normal permission prompt. `Run NextNote.command` already prefers
+`/opt/homebrew/bin/python3` for this reason; if you set up the venv manually
+run `which python3` first and make sure it's not under `Xcode.app`.
+
 ## How it works
 
 - **Tuner**: audio is captured continuously via `sounddevice`, windowed and
