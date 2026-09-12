@@ -1,0 +1,17 @@
+import sys
+
+from PyQt5.QtWidgets import QApplication
+
+from nextnote.ui.main_window import MainWindow
+
+
+def main() -> int:
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.resize(900, 700)
+    window.show()
+    return app.exec_()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
