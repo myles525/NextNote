@@ -118,7 +118,15 @@ class AnalysisWorker(QThread):
             self._ring_buffer.push(chunk)
             while self._ring_buffer.total_pushed - self._samples_read_cursor >= HOP_SIZE:
                 self._samples_read_cursor += HOP_SIZE
-                self._analyze_frame()
+                try:
+                    self._analyze_frame()
+                except Exception as exc:
+                    # An uncaught exception here would escape QThread.run(),
+                    # which PyQt5 treats as fatal (it calls abort() rather
+                    # than letting a Python exception unwind through Qt's C++
+                    # stack) -- so any unexpected DSP edge case must be
+                    # contained here rather than crashing the whole app.
+                    self.status_changed.emit(f"Analysis error (skipped a frame): {exc}")
 
         self._capture.stop()
 

@@ -11,6 +11,8 @@ around the winning peak using the raw (non-HPS) magnitude spectrum.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from nextnote.config import (
@@ -88,18 +90,24 @@ def find_fundamental_freq(
 
     peak_idx = masked_indices[np.argmax(masked_hps)]
     if peak_idx <= 0 or peak_idx >= len(mag) - 1:
-        return float(freqs[peak_idx])
+        freq = float(freqs[peak_idx])
+        return freq if math.isfinite(freq) and freq > 0 else None
 
     alpha, beta, gamma = mag[peak_idx - 1], mag[peak_idx], mag[peak_idx + 1]
     denom = alpha - 2 * beta + gamma
-    if denom == 0:
+    # A near-flat peak (denom close to but not exactly zero) makes the
+    # parabolic fit blow up; the interpolation is only mathematically valid
+    # for |p| <= 0.5, so clamp rather than let a huge offset through.
+    if abs(denom) < 1e-9:
         true_bin = float(peak_idx)
     else:
         p = 0.5 * (alpha - gamma) / denom
+        p = max(-0.5, min(0.5, p))
         true_bin = peak_idx + p
 
     freq_resolution = freqs[1] - freqs[0]
-    return true_bin * freq_resolution
+    freq = true_bin * freq_resolution
+    return freq if math.isfinite(freq) and freq > 0 else None
 
 
 def estimate_pitch(samples: np.ndarray, sample_rate: int) -> tuple[float | None, np.ndarray, np.ndarray]:
