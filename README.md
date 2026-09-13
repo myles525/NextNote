@@ -21,13 +21,22 @@ device.
 On macOS, double-click `Run NextNote.command` instead of using the terminal —
 it sets up the virtual environment on first run and launches the app.
 
-**macOS gotcha:** create the virtual environment with Homebrew's Python (or
-python.org's installer), not Xcode's bundled `Python3.framework`. If `python3`
-on your PATH resolves to Xcode's copy, macOS's privacy system hard-crashes
-the process the moment it touches the microphone instead of showing the
-normal permission prompt. `Run NextNote.command` already prefers
-`/opt/homebrew/bin/python3` for this reason; if you set up the venv manually
-run `which python3` first and make sure it's not under `Xcode.app`.
+**macOS gotcha:** any "framework build" of Python (Homebrew's and
+python.org's default on macOS, and Xcode's bundled copy) ships its own
+`Python.app` bundle. That bundle's `Info.plist` doesn't declare microphone
+usage, so macOS hard-aborts the process the instant it touches the mic
+instead of showing the normal permission prompt. `Run NextNote.command`
+detects this automatically and patches the bundle's `Info.plist` to declare
+mic usage, then re-signs it ad-hoc (idempotent — a no-op on later runs, and
+self-healing after a Homebrew upgrade replaces the bundle). If you set up
+the venv manually and hit a crash mentioning `abort() called` and a
+`Python.app` path, apply the same fix yourself:
+
+```
+PY_APP=$(python3 -c "import os,sys; print(os.path.dirname(os.path.dirname(os.path.realpath(sys.executable))) + '/Resources/Python.app')")
+/usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'NextNote uses the microphone.'" "$PY_APP/Contents/Info.plist"
+codesign --force --deep --sign - "$PY_APP"
+```
 
 ## How it works
 
