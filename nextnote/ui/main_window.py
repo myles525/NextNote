@@ -4,7 +4,9 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QHBoxLayout, QMainWindow, QSplitter, QWidget
 
 from nextnote.audio.worker import AnalysisWorker
+from nextnote.config import RECENCY_DECAY_NOTES
 from nextnote.theory.notes import NOTE_NAMES, pitch_class
+from nextnote.theory.recommend import recommend_next_notes
 from nextnote.theory.scales import nearest_in_scale_note, scale_pitch_classes
 from nextnote.ui.scale_panel import ScalePanel
 from nextnote.ui.sequence_widget import SequenceWidget
@@ -37,7 +39,7 @@ class MainWindow(QMainWindow):
 
         root_pc, scale_type = self.scale_panel.selector.current_selection()
         self._scale_pcs = scale_pitch_classes(root_pc, scale_type)
-        self._refresh_scale_notes_display()
+        self._refresh_scale_display()
 
         self.worker = AnalysisWorker()
         self._wire_signals()
@@ -54,26 +56,37 @@ class MainWindow(QMainWindow):
 
     def _on_scale_changed(self, root_pc: int, scale_type: str) -> None:
         """Slot for ScaleSelectorWidget.scale_changed: updates which pitch
-        classes count as 'in scale' for subsequent notes."""
+        classes count as 'in scale' and refreshes the notes/recommendations
+        shown for it."""
         self._scale_pcs = scale_pitch_classes(root_pc, scale_type)
-        self._refresh_scale_notes_display()
+        self._refresh_scale_display()
 
-    def _refresh_scale_notes_display(self) -> None:
+    def _refresh_scale_display(self) -> None:
+        """Update the scale-notes badges and recommendation row for
+        self._scale_pcs, using whatever note history exists so far."""
         note_names = [NOTE_NAMES[pc] for pc in self._scale_pcs]
         self.scale_panel.set_scale_notes_display(note_names)
 
+        recent_pcs = self.sequence_widget.recent_pitch_classes(RECENCY_DECAY_NOTES)
+        recs = recommend_next_notes(self._scale_pcs, recent_pcs)
+        self.scale_panel.set_recommendations(recs)
+
     def _on_note_confirmed(self, note_name: str, midi_number: int, timestamp_sec: float) -> None:
         """Slot for AnalysisWorker.note_confirmed. Logs the note (color-coded
-        by scale membership) and, if it falls outside the selected scale,
-        shows the nearest in-scale note as a suggestion."""
+        by scale membership), shows a nearest-note suggestion if it fell
+        outside the selected scale, and refreshes what to play next."""
         in_scale = pitch_class(midi_number) in self._scale_pcs
-        self.sequence_widget.on_note_confirmed(note_name, in_scale)
+        self.sequence_widget.on_note_confirmed(note_name, midi_number, in_scale)
 
         if in_scale:
             self.scale_panel.show_in_scale(note_name)
         else:
             suggestion_name, _suggestion_midi = nearest_in_scale_note(midi_number, self._scale_pcs)
             self.scale_panel.show_out_of_scale(note_name, suggestion_name)
+
+        recent_pcs = self.sequence_widget.recent_pitch_classes(RECENCY_DECAY_NOTES)
+        recs = recommend_next_notes(self._scale_pcs, recent_pcs)
+        self.scale_panel.set_recommendations(recs)
 
     def closeEvent(self, event) -> None:
         """Ensure the audio worker thread and its input stream are stopped
