@@ -14,6 +14,28 @@ def recommend_next_notes(
     recency_decay_notes: int = RECENCY_DECAY_NOTES,
     recency_penalty: float = RECENCY_PENALTY,
 ) -> list[str]:
+    """Suggest scale tones worth playing next, favoring ones played less recently.
+
+    Every note in the detected scale starts at weight 1.0. Notes found in the
+    recent-history window get penalized (most recently played = most
+    penalized), so the ranking nudges the player toward underused scale
+    tones. The tonic and dominant get a small bonus so suggestions still
+    feel musically anchored to the key.
+
+    Args:
+        key_result: the currently detected key/scale, or None if no key has
+            been detected yet (returns an empty list in that case).
+        recent_pitch_classes: pitch classes (0-11) of recently played notes,
+            oldest first.
+        count: how many notes to suggest.
+        recency_decay_notes: how many of the most recent notes count as
+            "recently played" for the penalty.
+        recency_penalty: the weight multiplier applied to a note played most
+            recently (closer to 0 = stronger penalty).
+
+    Returns:
+        Note names (no octave), best suggestion first.
+    """
     if key_result is None:
         return []
 

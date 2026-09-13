@@ -14,6 +14,9 @@ NEUTRAL_COLOR = QColor(150, 150, 150)
 
 
 class GaugeWidget(QWidget):
+    """A semicircular needle dial showing how many cents sharp/flat the
+    currently detected pitch is, with color feedback (green when in tune)."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._cents = 0.0
@@ -22,16 +25,21 @@ class GaugeWidget(QWidget):
         self.setMinimumSize(260, 160)
 
     def set_cents(self, cents: float, in_tune: bool) -> None:
+        """Update the needle position. cents is clamped to the display
+        range; in_tune controls the needle/arc color."""
         self._cents = max(-CENTS_DISPLAY_RANGE, min(CENTS_DISPLAY_RANGE, cents))
         self._in_tune = in_tune
         self._active = True
         self.update()
 
     def set_idle(self) -> None:
+        """Show a neutral gray needle, e.g. when there's no signal to tune to."""
         self._active = False
         self.update()
 
     def paintEvent(self, event) -> None:
+        """Qt paint callback: draws the background arc, in-tune (green) zone,
+        tick marks every 10 cents, the needle, and a center indicator dot."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 

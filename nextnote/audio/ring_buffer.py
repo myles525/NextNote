@@ -7,13 +7,21 @@ import numpy as np
 
 
 class RingBuffer:
+    """Accumulates variable-length audio chunks and lets callers pull a
+    fixed-size window of the most recent samples for FFT analysis, without
+    needing chunk boundaries to line up with the analysis window size."""
+
     def __init__(self, capacity: int):
+        """capacity: maximum number of samples retained; older samples are
+        dropped once this is exceeded."""
         self._capacity = capacity
         self._chunks: deque[np.ndarray] = deque()
         self._total_pushed = 0
         self._total_samples = 0
 
     def push(self, chunk: np.ndarray) -> None:
+        """Append a new chunk of samples, discarding old chunks once the
+        buffer exceeds its capacity."""
         self._chunks.append(chunk)
         self._total_pushed += len(chunk)
         self._total_samples += len(chunk)
@@ -22,6 +30,8 @@ class RingBuffer:
             self._total_samples -= len(dropped)
 
     def get_last(self, n: int) -> np.ndarray:
+        """Return the most recent n samples as a contiguous array, zero-padded
+        at the start if fewer than n samples have been pushed so far."""
         if not self._chunks:
             return np.zeros(n, dtype=np.float32)
         buf = np.concatenate(self._chunks)

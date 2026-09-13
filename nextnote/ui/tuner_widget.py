@@ -9,6 +9,10 @@ from nextnote.ui.gauge_widget import GaugeWidget
 
 
 class TunerWidget(QWidget):
+    """Top-half tuner display: current note name, the gauge dial, and a
+    status line. Driven entirely by slots connected to AnalysisWorker's
+    signals — never touches audio/DSP state directly."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -28,6 +32,9 @@ class TunerWidget(QWidget):
         layout.addWidget(self.status_label)
 
     def on_pitch_updated(self, freq_hz: float, rms: float) -> None:
+        """Slot for AnalysisWorker.pitch_updated. Shows an idle state when
+        the signal is too quiet/absent, otherwise updates the note label and
+        gauge with color feedback based on the in-tune threshold."""
         if rms < MIN_NOTE_RMS or freq_hz <= 0:
             self.note_label.setText("--")
             self.note_label.setStyleSheet("font-size: 56px; font-weight: bold; color: #999;")
@@ -42,4 +49,5 @@ class TunerWidget(QWidget):
         self.gauge.set_cents(cents, in_tune)
 
     def on_status_changed(self, status: str) -> None:
+        """Slot for AnalysisWorker.status_changed; shows status/error text."""
         self.status_label.setText(status)

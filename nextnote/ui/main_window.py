@@ -13,6 +13,10 @@ from nextnote.ui.tuner_widget import TunerWidget
 
 
 class MainWindow(QMainWindow):
+    """Top-level application window: tuner on top, note log + key/recommendation
+    panel on bottom. Owns the audio worker thread and the key detector, and
+    is the only place that wires audio-side signals to UI-side widgets."""
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("NextNote")
@@ -38,11 +42,17 @@ class MainWindow(QMainWindow):
         self.worker.start()
 
     def _wire_signals(self) -> None:
+        """Connect AnalysisWorker's Qt signals to the widgets/handlers that
+        react to them. Qt marshals these calls onto the UI thread
+        automatically since the worker lives on a different thread."""
         self.worker.pitch_updated.connect(self.tuner_widget.on_pitch_updated)
         self.worker.status_changed.connect(self.tuner_widget.on_status_changed)
         self.worker.note_confirmed.connect(self._on_note_confirmed)
 
     def _on_note_confirmed(self, note_name: str, midi_number: int, timestamp_sec: float) -> None:
+        """Slot for AnalysisWorker.note_confirmed. Logs the note, updates the
+        key detector, and — once a key can be determined — refreshes the
+        key label and next-note recommendations."""
         self.sequence_widget.on_note_confirmed(note_name, midi_number)
         self.key_detector.add_note(midi_number, timestamp_sec)
 
@@ -54,5 +64,7 @@ class MainWindow(QMainWindow):
             self.key_panel.on_recommendation_updated(recs)
 
     def closeEvent(self, event) -> None:
+        """Ensure the audio worker thread and its input stream are stopped
+        cleanly before the window (and process) closes."""
         self.worker.stop()
         super().closeEvent(event)

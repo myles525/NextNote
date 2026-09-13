@@ -13,6 +13,7 @@ def freq_to_midi(freq: float, a4_freq: float = A4_FREQ) -> float:
 
 
 def midi_to_freq(midi: float, a4_freq: float = A4_FREQ) -> float:
+    """Frequency in Hz for a (possibly fractional) MIDI note number."""
     return a4_freq * (2.0 ** ((midi - 69.0) / 12.0))
 
 
@@ -36,4 +37,7 @@ def freq_to_note_and_cents(freq: float, a4_freq: float = A4_FREQ) -> tuple[str, 
 
 
 def pitch_class(midi_number: int) -> int:
+    """The note's position within an octave, 0-11 (0=C, 1=C#, ... 11=B),
+    discarding octave information. Used to compare notes regardless of
+    register, e.g. for key/scale detection."""
     return midi_number % 12

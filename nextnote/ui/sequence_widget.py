@@ -7,6 +7,9 @@ from nextnote.theory.notes import pitch_class
 
 
 class SequenceWidget(QWidget):
+    """Bottom-left panel: a scrolling log of confirmed notes, and the
+    underlying MIDI history used to feed key detection and recommendations."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -21,6 +24,9 @@ class SequenceWidget(QWidget):
         layout.addWidget(self.note_list)
 
     def on_note_confirmed(self, note_name: str, midi_number: int) -> None:
+        """Slot for AnalysisWorker.note_confirmed: appends the note to the
+        visible log and its MIDI history, trimming both to the configured
+        maximum length."""
         self.note_list.addItem(note_name)
         self.note_list.scrollToBottom()
         self._midi_history.append(midi_number)
@@ -31,4 +37,6 @@ class SequenceWidget(QWidget):
             self._midi_history = self._midi_history[-SEQUENCE_LOG_MAX_ITEMS:]
 
     def recent_pitch_classes(self, n: int) -> list[int]:
+        """Pitch classes (0-11) of the last n notes played, oldest first —
+        used by MainWindow to feed the recommendation logic."""
         return [pitch_class(m) for m in self._midi_history[-n:]]

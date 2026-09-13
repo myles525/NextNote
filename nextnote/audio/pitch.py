@@ -28,7 +28,19 @@ def compute_magnitude_and_hps(
     n_harmonics: int = HPS_HARMONICS,
     zero_pad_factor: int = ZERO_PAD_FACTOR,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Returns (freqs, magnitude_spectrum, hps_spectrum)."""
+    """Window, FFT, and build the Harmonic Product Spectrum for a sample block.
+
+    Applies a Hann window (reduces spectral leakage from the block edges),
+    zero-pads before the FFT (smooths the peak shape for later interpolation),
+    then computes the HPS by multiplying n_harmonics downsampled copies of the
+    magnitude spectrum together — this reinforces the true fundamental (whose
+    harmonics line up across every downsampled copy) relative to a spectrum
+    peak at a harmonic, which won't.
+
+    Returns:
+        (freqs, magnitude_spectrum, hps_spectrum) — all the same length,
+        indexed by FFT bin.
+    """
     n = len(samples)
     window = np.hanning(n)
     windowed = samples * window
@@ -54,6 +66,17 @@ def find_fundamental_freq(
     min_freq: float = MIN_FREQ_HZ,
     max_freq: float = MAX_FREQ_HZ,
 ) -> float | None:
+    """Locate the fundamental frequency from an HPS spectrum.
+
+    Picks the highest HPS peak within [min_freq, max_freq] (restricting the
+    search to the guitar's playable range avoids picking up rumble or
+    ultrasonic noise), then refines that peak's frequency with parabolic
+    interpolation over the raw magnitude spectrum's neighboring bins — this
+    is what gives cents-level accuracy despite a much coarser raw FFT bin
+    spacing.
+
+    Returns None if there's no energy in range (e.g. silence).
+    """
     mask = (freqs >= min_freq) & (freqs <= max_freq)
     if not np.any(mask):
         return None

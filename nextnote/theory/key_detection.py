@@ -34,6 +34,17 @@ MINOR_WEIGHTS = np.array([6, 0, 3, 4, 0, 3, 0, 5, 3, 0, 2, 0], dtype=float)
 
 @dataclass
 class KeyResult:
+    """The best-matching key/scale for a window of recently played notes.
+
+    Attributes:
+        root_pitch_class: 0-11 (0=C, 1=C#, ... 11=B) tonic of the detected key.
+        is_major: True for major, False for natural minor.
+        correlation: Pearson correlation of the observed pitch-class histogram
+            against this key's template; higher means a more confident match.
+        scale_notes: the 7 pitch classes (0-11) that make up the scale,
+            starting with the root.
+    """
+
     root_pitch_class: int
     is_major: bool
     correlation: float
@@ -41,23 +52,36 @@ class KeyResult:
 
     @property
     def name(self) -> str:
+        """Human-readable key name, e.g. 'A Minor'."""
         mode = "Major" if self.is_major else "Minor"
         return f"{NOTE_NAMES[self.root_pitch_class]} {mode}"
 
 
 class KeyDetector:
+    """Tracks a sliding window of recently played notes and estimates the
+    most likely key/scale from their pitch-class distribution."""
+
     def __init__(
         self,
         window_note_count: int = KEY_WINDOW_NOTE_COUNT,
         window_max_age_sec: float = KEY_WINDOW_MAX_AGE_SEC,
         min_notes: int = KEY_MIN_NOTES_TO_ANALYZE,
     ):
+        """
+        Args:
+            window_note_count: keep at most this many of the most recent notes.
+            window_max_age_sec: also drop notes older than this many seconds,
+                so the detected key can follow the player as they change keys.
+            min_notes: don't attempt detection until at least this many notes
+                have been played (too few notes give unreliable correlations).
+        """
         self._window_note_count = window_note_count
         self._window_max_age_sec = window_max_age_sec
         self._min_notes = min_notes
         self._notes: deque[tuple[int, float]] = deque()
 
     def add_note(self, midi_number: int, timestamp_sec: float) -> None:
+        """Record a newly played note and trim the window to size/age limits."""
         self._notes.append((midi_number % 12, timestamp_sec))
         while len(self._notes) > self._window_note_count:
             self._notes.popleft()
@@ -66,9 +90,18 @@ class KeyDetector:
             self._notes.popleft()
 
     def recent_pitch_classes(self) -> list[int]:
+        """Pitch classes (0-11) of the notes currently in the window, oldest first."""
         return [pc for pc, _ in self._notes]
 
     def detect(self) -> KeyResult | None:
+        """Estimate the current key/scale from the note window.
+
+        Builds a normalized 12-bin pitch-class histogram and correlates it
+        against all 24 rotated major/minor templates, returning the
+        best-scoring match. Returns None if there aren't enough notes yet, or
+        if the notes played so far are too uniform to discriminate a key
+        (e.g. only one distinct pitch class).
+        """
         if len(self._notes) < self._min_notes:
             return None
 
@@ -98,6 +131,9 @@ class KeyDetector:
 
 
 def _safe_corrcoef(a: np.ndarray, b: np.ndarray) -> float:
+    """Pearson correlation of a and b, or -2.0 (lower than any real
+    correlation) if either has zero variance, which would otherwise make
+    numpy.corrcoef divide by zero."""
     if np.std(a) == 0 or np.std(b) == 0:
         return -2.0
     return float(np.corrcoef(a, b)[0, 1])
