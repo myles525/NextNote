@@ -1,21 +1,20 @@
-"""Top-level window: tuner on top, note log + key/recommendation panel on bottom."""
+"""Top-level window: tuner on top, note log + scale panel on bottom."""
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QHBoxLayout, QMainWindow, QSplitter, QWidget
 
 from nextnote.audio.worker import AnalysisWorker
-from nextnote.config import RECENCY_DECAY_NOTES
-from nextnote.theory.key_detection import KeyDetector
-from nextnote.theory.recommend import recommend_next_notes
-from nextnote.ui.key_panel import KeyPanel
+from nextnote.theory.notes import NOTE_NAMES, pitch_class
+from nextnote.theory.scales import nearest_in_scale_note, scale_pitch_classes
+from nextnote.ui.scale_panel import ScalePanel
 from nextnote.ui.sequence_widget import SequenceWidget
 from nextnote.ui.tuner_widget import TunerWidget
 
 
 class MainWindow(QMainWindow):
-    """Top-level application window: tuner on top, note log + key/recommendation
-    panel on bottom. Owns the audio worker thread and the key detector, and
-    is the only place that wires audio-side signals to UI-side widgets."""
+    """Top-level application window: tuner on top, note log + scale panel on
+    bottom. Owns the audio worker thread and the currently selected scale,
+    and is the only place that wires audio-side signals to UI-side widgets."""
 
     def __init__(self):
         super().__init__()
@@ -23,12 +22,12 @@ class MainWindow(QMainWindow):
 
         self.tuner_widget = TunerWidget()
         self.sequence_widget = SequenceWidget()
-        self.key_panel = KeyPanel()
+        self.scale_panel = ScalePanel()
 
         bottom_container = QWidget()
         bottom_layout = QHBoxLayout(bottom_container)
         bottom_layout.addWidget(self.sequence_widget, stretch=1)
-        bottom_layout.addWidget(self.key_panel, stretch=1)
+        bottom_layout.addWidget(self.scale_panel, stretch=1)
 
         splitter = QSplitter(Qt.Vertical)
         splitter.addWidget(self.tuner_widget)
@@ -36,7 +35,10 @@ class MainWindow(QMainWindow):
         splitter.setSizes([350, 350])
         self.setCentralWidget(splitter)
 
-        self.key_detector = KeyDetector()
+        root_pc, scale_type = self.scale_panel.selector.current_selection()
+        self._scale_pcs = scale_pitch_classes(root_pc, scale_type)
+        self._refresh_scale_notes_display()
+
         self.worker = AnalysisWorker()
         self._wire_signals()
         self.worker.start()
@@ -48,20 +50,30 @@ class MainWindow(QMainWindow):
         self.worker.pitch_updated.connect(self.tuner_widget.on_pitch_updated)
         self.worker.status_changed.connect(self.tuner_widget.on_status_changed)
         self.worker.note_confirmed.connect(self._on_note_confirmed)
+        self.scale_panel.selector.scale_changed.connect(self._on_scale_changed)
+
+    def _on_scale_changed(self, root_pc: int, scale_type: str) -> None:
+        """Slot for ScaleSelectorWidget.scale_changed: updates which pitch
+        classes count as 'in scale' for subsequent notes."""
+        self._scale_pcs = scale_pitch_classes(root_pc, scale_type)
+        self._refresh_scale_notes_display()
+
+    def _refresh_scale_notes_display(self) -> None:
+        note_names = [NOTE_NAMES[pc] for pc in self._scale_pcs]
+        self.scale_panel.set_scale_notes_display(note_names)
 
     def _on_note_confirmed(self, note_name: str, midi_number: int, timestamp_sec: float) -> None:
-        """Slot for AnalysisWorker.note_confirmed. Logs the note, updates the
-        key detector, and — once a key can be determined — refreshes the
-        key label and next-note recommendations."""
-        self.sequence_widget.on_note_confirmed(note_name, midi_number)
-        self.key_detector.add_note(midi_number, timestamp_sec)
+        """Slot for AnalysisWorker.note_confirmed. Logs the note (color-coded
+        by scale membership) and, if it falls outside the selected scale,
+        shows the nearest in-scale note as a suggestion."""
+        in_scale = pitch_class(midi_number) in self._scale_pcs
+        self.sequence_widget.on_note_confirmed(note_name, in_scale)
 
-        key_result = self.key_detector.detect()
-        if key_result is not None:
-            self.key_panel.on_key_updated(key_result.name, key_result.correlation)
-            recent_pcs = self.sequence_widget.recent_pitch_classes(RECENCY_DECAY_NOTES)
-            recs = recommend_next_notes(key_result, recent_pcs)
-            self.key_panel.on_recommendation_updated(recs)
+        if in_scale:
+            self.scale_panel.show_in_scale(note_name)
+        else:
+            suggestion_name, _suggestion_midi = nearest_in_scale_note(midi_number, self._scale_pcs)
+            self.scale_panel.show_out_of_scale(note_name, suggestion_name)
 
     def closeEvent(self, event) -> None:
         """Ensure the audio worker thread and its input stream are stopped
